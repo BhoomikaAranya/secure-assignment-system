@@ -65,6 +65,40 @@ createAssignment,
       </button>
 
       <br /><br />
+<h2>Assignment Statistics</h2>
+
+<p>
+  Total Assignments: {allAssignments.length}
+</p>
+
+<p>
+  Pending: {
+    allAssignments.filter(
+      (a) => a.status === "Pending"
+    ).length
+  }
+</p>
+
+<p>
+  Approved: {
+    allAssignments.filter(
+      (a) => a.status === "Approved"
+    ).length
+  }
+</p>
+
+<p>
+  Rejected: {
+    allAssignments.filter(
+      (a) => a.status === "Rejected"
+    ).length
+  }
+</p>
+
+<hr />
+
+
+
 
       {allAssignments.map((assignment, index) => (
         <div
