@@ -37,6 +37,7 @@ function App() {
   const [deadline, setDeadline] = useState("");
   const [facultySubject, setFacultySubject] =
   useState("");
+  const [auditLogs, setAuditLogs] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [myAssignments, setMyAssignments] = useState([]);
   
@@ -223,6 +224,16 @@ if (
     ? selectedFile.name
     : "",
     });
+
+    await push(ref(db, "auditLogs"), {
+  action: `Student submitted assignment: ${title}`,
+  user: currentUser,
+  timestamp: new Date().toLocaleString(),
+});
+
+
+
+
     setReceipt({
   submissionId,
   studentEmail: currentUser,
@@ -256,6 +267,15 @@ const createAssignment = async () => {
       createdAt: new Date().toLocaleString(),
     });
 
+
+await push(ref(db, "auditLogs"), {
+  action: `Faculty created assignment: ${assignmentTitle}`,
+  user: currentUser,
+  timestamp: new Date().toLocaleString(),
+});
+
+
+
     alert("Assignment Created Successfully!");
 
     setAssignmentTitle("");
@@ -267,6 +287,32 @@ const createAssignment = async () => {
   }
 };
 
+
+
+const loadAuditLogs = async () => {
+  try {
+    const snapshot = await get(ref(db, "auditLogs"));
+
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+
+      const logs = [];
+
+      for (let key in data) {
+        logs.push({
+          id: key,
+          ...data[key],
+        });
+      }
+
+      logs.reverse();
+
+      setAuditLogs(logs);
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+};
 
 
   const loadAssignments = async () => {
@@ -381,6 +427,19 @@ const updateAssignmentStatus = async (id, status) => {
       feedback: feedback,
     });
 
+await push(ref(db, "auditLogs"), {
+  action: `Faculty ${status} an assignment`,
+  user: currentUser,
+  timestamp: new Date().toLocaleString(),
+});
+
+
+await push(ref(db, "auditLogs"), {
+  action: `Assignment ${status}`,
+  user: currentUser,
+  timestamp: new Date().toLocaleString(),
+});
+
     alert("Updated successfully!");
 
     loadAllAssignments();
@@ -409,6 +468,9 @@ deadline={deadline}
 setDeadline={setDeadline}
 
 createAssignment={createAssignment}
+
+auditLogs={auditLogs}
+loadAuditLogs={loadAuditLogs}
     />
   );
 }

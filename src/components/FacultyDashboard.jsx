@@ -14,6 +14,8 @@ deadline,
 setDeadline,
 
 createAssignment,
+auditLogs,
+loadAuditLogs,
 }) {
   return (
     <div style={{ padding: "30px" }}>
@@ -64,6 +66,13 @@ createAssignment,
         View All Assignments
       </button>
 
+
+<button
+  onClick={loadAuditLogs}
+  style={{ marginLeft: "10px" }}
+>
+  View Audit Logs
+</button>
       <br /><br />
 <h2>Assignment Statistics</h2>
 
@@ -97,6 +106,25 @@ createAssignment,
 
 <hr />
 
+
+
+
+<h2>Audit Logs</h2>
+
+{auditLogs.map((log, index) => (
+  <div
+    key={index}
+    style={{
+      border: "1px solid gray",
+      padding: "8px",
+      marginBottom: "5px",
+    }}
+  >
+    <p>{log.action}</p>
+    <p>User: {log.user}</p>
+    <p>{log.timestamp}</p>
+  </div>
+))}
 
 
 
