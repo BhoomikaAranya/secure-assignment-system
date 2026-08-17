@@ -1,3 +1,6 @@
+import { useState } from "react";
+
+
 function FacultyDashboard({
   currentUser,
   allAssignments,
@@ -6,17 +9,15 @@ function FacultyDashboard({
   logout,
   assignmentTitle,
 setAssignmentTitle,
-
 assignmentSubject,
 setAssignmentSubject,
-
 deadline,
 setDeadline,
-
 createAssignment,
 auditLogs,
 loadAuditLogs,
 }) {
+  const [searchTerm, setSearchTerm] = useState("");   
   return (
     <div style={{ padding: "30px" }}>
       <h1>Faculty Dashboard</h1>
@@ -127,8 +128,35 @@ loadAuditLogs,
 ))}
 
 
+<h2>Search Assignments</h2>
 
-      {allAssignments.map((assignment, index) => (
+<input
+  type="text"
+  placeholder="Search by title, subject, email, submission ID"
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+/>
+
+<br /><br />
+
+
+
+     {
+  allAssignments
+    .filter((assignment) =>
+      (
+        assignment.title +
+        " " +
+        assignment.subject +
+        " " +
+        assignment.studentEmail +
+        " " +
+        (assignment.submissionId || "")
+      )
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
+    )
+    .map((assignment, index) => (
         <div
           key={index}
           style={{
