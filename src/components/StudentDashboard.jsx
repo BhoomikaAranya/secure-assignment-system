@@ -18,7 +18,6 @@ function StudentDashboard({
   setSelectedFile,
 }) {
 
-
   return (
     <div style={{ padding: "30px" }}>
       <h1>Student Dashboard</h1>
@@ -113,9 +112,6 @@ function StudentDashboard({
   Selected File:
   {selectedFile?.name}
 </p>
-
-
-
 
 <h3>Available Assignments</h3>
 
