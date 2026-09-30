@@ -3,6 +3,7 @@ import StudentDashboard from "./components/StudentDashboard";
 import RoleSelection from "./components/RoleSelection";
 import Auth from "./components/Auth";
 
+
 import { useState } from "react";
 
 import { auth, db } from "./firebase";
@@ -17,6 +18,8 @@ import {
   findMostSimilarSubmission,
   getSimilarityStatus,
 } from "./services/plagiarismService";
+
+import { calculateSHA256 } from "./services/hashService";
 
 import {
   ref,
@@ -458,7 +461,18 @@ function App() {
         const submissionId =
           "SUB-" + Date.now();
 
+         
+        // =================================================
+        // SHA-256 FILE INTEGRITY HASH
+        // =================================================
 
+        const fileHash =
+          await calculateSHA256(selectedFile);
+
+        console.log(
+          "SHA-256 File Hash:",
+          fileHash
+        );
         // =================================================
         // DEFAULT PLAGIARISM RESULT
         // =================================================
@@ -784,7 +798,11 @@ function App() {
                 ? selectedFile.name
                 : "",
 
+           // ===========================================
+          // SHA-256 FILE HASH
+          // ===========================================
 
+          fileHash,
             // -------------------------------------------
             // PLAGIARISM DATA
             // -------------------------------------------

@@ -1,5 +1,9 @@
 import { useState } from "react";
 
+import {
+  calculateSHA256FromUrl,
+} from "../services/hashService";
+
 function FacultyDashboard({
   currentUser,
   allAssignments,
@@ -43,6 +47,79 @@ function FacultyDashboard({
         return "gray";
     }
   };
+
+  // =====================================================
+  // VERIFY FILE INTEGRITY
+  // =====================================================
+
+  const verifyFileIntegrity = async (assignment) => {
+    try {
+      // Check whether the submitted file exists
+      if (!assignment.fileUrl) {
+        alert("File URL is not available.");
+        return;
+      }
+
+      // Check whether the original hash exists
+      if (!assignment.fileHash) {
+        alert(
+          "No original SHA-256 hash is stored for this submission."
+        );
+        return;
+      }
+
+      alert(
+        "Verifying file integrity. Please wait..."
+      );
+
+      // Calculate SHA-256 from the current file
+      const currentHash =
+        await calculateSHA256FromUrl(
+          assignment.fileUrl
+        );
+
+      // Log both hashes for debugging
+      console.log(
+        "Stored SHA-256:",
+        assignment.fileHash
+      );
+
+      console.log(
+        "Current SHA-256:",
+        currentHash
+      );
+
+      // Compare original hash with current hash
+      if (
+        assignment.fileHash.toLowerCase() ===
+        currentHash.toLowerCase()
+      ) {
+        alert(
+          "✅ File Integrity Verified!\n\n" +
+          "The current file matches the original SHA-256 hash."
+        );
+      } else {
+        alert(
+          "❌ File Integrity Failed!\n\n" +
+          "The current file does NOT match the original SHA-256 hash."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Integrity verification failed:",
+        error
+      );
+
+      alert(
+        "Unable to verify file integrity.\n\n" +
+        error.message
+      );
+    }
+  };
+
+  // =====================================================
+  // RETURN UI
+  // =====================================================
 
   return (
     <div style={{ padding: "30px" }}>
@@ -282,6 +359,29 @@ function FacultyDashboard({
                 </p>
               )}
 
+              {/* =========================================
+                  SHA-256 FILE INTEGRITY VERIFICATION
+              ========================================= */}
+
+              {assignment.fileUrl &&
+                assignment.fileHash && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      marginBottom: "15px",
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        verifyFileIntegrity(
+                          assignment
+                        )
+                      }
+                    >
+                      Verify File Integrity
+                    </button>
+                  </div>
+                )}
 
               <p>
                 {assignment.description}
