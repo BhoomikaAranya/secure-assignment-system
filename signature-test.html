@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Digital Signature Test</title>
+</head>
+<body>
+  <h2>Digital Signature Test</h2>
+  <pre id="result">Running test...</pre>
+
+  <script type="module">
+    import {
+      signFileHash,
+      verifyFileSignature
+    } from "/src/services/digitalSignatureService.js";
+
+    const output = document.getElementById("result");
+
+    
+    try {
+      const originalHash = "abc123testhash";
+      const studentEmail = "signature-test@example.com";
+
+      const result = await signFileHash(
+        originalHash,
+        studentEmail
+      );
+
+      // Test 1: Original signature and original hash
+      const valid = await verifyFileSignature(
+        originalHash,
+        result.signature,
+        result.publicKey
+      );
+
+      // Test 2: Original signature, changed hash
+      const changedHash = await verifyFileSignature(
+        "changed-hash",
+        result.signature,
+        result.publicKey
+      );
+
+      // Test 3: Incorrect signature, original hash
+      const invalidSignature = btoa("not-a-real-signature");
+
+      let wrongSignature = false;
+
+      try {
+        wrongSignature = await verifyFileSignature(
+          originalHash,
+          invalidSignature,
+          result.publicKey
+        );
+      } catch {
+        // Malformed signatures may throw an error.
+        wrongSignature = false;
+      }
+
+      output.textContent =
+        `Original signature: ${valid}\n` +
+        `Changed hash: ${changedHash}\n` +
+        `Incorrect signature: ${wrongSignature}\n\n` +
+        (valid && !changedHash && !wrongSignature
+          ? "SUCCESS: All digital signature tests passed!"
+          : "FAILED: Check the verification results.");
+
+    } catch (error) {
+      output.textContent = "TEST ERROR: " + error.message;
+      console.error(error);
+    }
+
+  </script>
+</body>
+</html>

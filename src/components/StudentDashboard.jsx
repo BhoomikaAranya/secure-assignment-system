@@ -1,6 +1,7 @@
 function StudentDashboard({
   currentUser,
   userRole,
+  openSecurityDashboard,
   title,
   setTitle,
   subject,
@@ -198,9 +199,26 @@ function StudentDashboard({
         </div>
       ))}
 
-      <button onClick={logout}>
-        Logout
-      </button>
+      
+<button
+  onClick={openSecurityDashboard}
+  style={{
+    marginRight: "10px",
+    padding: "10px 16px",
+    backgroundColor: "#166534",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  }}
+>
+  🔐 Security Dashboard
+</button>
+
+<button onClick={logout}>
+  Logout
+</button>
+
     </div>
   );
 }
