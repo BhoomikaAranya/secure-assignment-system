@@ -1,0 +1,53 @@
+{
+  "rules": {
+    "students": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "faculty": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "facultyKeys": {
+      "$facultyUid": {
+        "publicKey": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $facultyUid && (!data.exists() || data.child('ownerUid').val() === auth.uid) && newData.child('ownerUid').val() === auth.uid"
+        },
+        "protectedPrivateKey": {
+          ".read": "auth != null && auth.uid === $facultyUid",
+          ".write": "auth != null && auth.uid === $facultyUid && newData.child('ownerUid').val() === auth.uid"
+        }
+      }
+    },
+    "assignmentsCreated": {
+      ".read": "auth != null",
+      "$assignmentId": {
+        ".write": "auth != null && (!data.exists() ? newData.child('createdByUid').val() === auth.uid : data.child('createdByUid').val() === auth.uid)"
+      }
+    },
+    "assignments": {
+      ".read": "auth != null",
+      "$submissionId": {
+        ".read": "auth != null && (data.child('studentUid').val() === auth.uid || data.child('facultyUid').val() === auth.uid || root.child('faculty').hasChild(auth.uid))",
+        ".write": "auth != null && ((!data.exists() && newData.child('studentUid').val() === auth.uid) || (data.exists() && (data.child('facultyUid').val() === auth.uid || root.child('faculty').hasChild(auth.uid)) && !newData.child('studentUid').changed() && !newData.child('fileUrl').changed() && !newData.child('ciphertextHash').changed() && !newData.child('wrappedAESKey').changed()))"
+      }
+    },
+    "auditLogs": {
+      ".read": "auth != null && root.child('faculty').hasChild(auth.uid)",
+      "$logId": {
+        ".write": "auth != null && !data.exists() && (newData.child('userUid').val() === auth.uid || !newData.hasChild('userUid'))"
+      }
+    },
+    "authOtps": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

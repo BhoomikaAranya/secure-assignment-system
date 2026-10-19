@@ -2,6 +2,7 @@ import FacultyDashboard from "./components/FacultyDashboard";
 import StudentDashboard from "./components/StudentDashboard";
 import RoleSelection from "./components/RoleSelection";
 import Auth from "./components/Auth";
+import OTPVerification from "./components/OTPVerification";
 
 
 import { useState } from "react";
@@ -20,6 +21,19 @@ import {
 } from "./services/plagiarismService";
 
 import { calculateSHA256 } from "./services/hashService";
+
+import {
+  encryptFile,
+  wrapAESKeyForFaculty,
+  importECCPublicKey,
+} from "./services/encryptionService";
+
+import {
+  generateNumericOTP,
+  storeOTPRecord,
+  sendEmailOTP,
+  verifyOTPRecord,
+} from "./services/otpService";
 
 import {
   ref,
@@ -55,6 +69,25 @@ function App() {
   const [userRole, setUserRole] =
     useState("");
 
+  // =====================================================
+  // 2FA OTP STATES
+  // =====================================================
+
+  const [isVerifyingOtp, setIsVerifyingOtp] =
+    useState(false);
+
+  const [pendingAuth, setPendingAuth] =
+    useState(null);
+
+  const [otpExpiresAt, setOtpExpiresAt] =
+    useState(0);
+
+  const [simulatedOtpCode, setSimulatedOtpCode] =
+    useState(null);
+
+  const [isSubmittingOtp, setIsSubmittingOtp] =
+    useState(false);
+
 
   // =====================================================
   // STUDENT STATES
@@ -77,6 +110,12 @@ function App() {
 
   const [availableAssignments, setAvailableAssignments] =
     useState([]);
+
+  const [selectedAssignmentId, setSelectedAssignmentId] =
+    useState("");
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
 
   const [receipt, setReceipt] =
     useState(null);
@@ -279,36 +318,38 @@ function App() {
 
 
       // =================================================
-      // SET LOGIN STATE
+      // TRIGGER 2FA EMAIL OTP VERIFICATION
       // =================================================
 
-      setUserRole(
-        userData.role
+      const otp = generateNumericOTP(6);
+
+      const { expiresAt } = await storeOTPRecord(
+        db,
+        user.uid,
+        user.email,
+        otp,
+        5
       );
 
-      setCurrentUser(
-        user.email
-      );
+      const sendResult = await sendEmailOTP({
+        email: user.email,
+        otp,
+        userName: user.email,
+      });
 
-      setLoggedIn(true);
+      setPendingAuth({
+        user,
+        userData,
+      });
 
-
-      // =================================================
-      // STORE FACULTY SUBJECT
-      // =================================================
-
-      if (
-        userData.role === "faculty"
-      ) {
-
-        setFacultySubject(
-          userData.subject
-        );
-      }
-
+      setOtpExpiresAt(expiresAt);
+      setSimulatedOtpCode(sendResult.deliveredVia === "simulated" ? otp : null);
+      setIsVerifyingOtp(true);
 
       alert(
-        "Welcome " + user.email
+        sendResult.deliveredVia === "simulated"
+          ? `🔐 Two-Factor Authentication Triggered!\n\nA 6-digit code has been sent to ${user.email} (In development: ${otp}).`
+          : `🔐 Two-Factor Authentication Triggered!\n\nA 6-digit code has been sent to your email (${user.email}).`
       );
 
     } catch (error) {
@@ -320,10 +361,103 @@ function App() {
 
 
   // =====================================================
+  // 2FA OTP VERIFICATION HANDLERS
+  // =====================================================
+
+  const handleVerifyOtp = async (enteredOtp) => {
+    if (!pendingAuth) return;
+
+    try {
+      setIsSubmittingOtp(true);
+
+      await verifyOTPRecord(
+        db,
+        pendingAuth.user.uid,
+        enteredOtp
+      );
+
+      // OTP verified successfully -> Complete sign-in
+      setUserRole(pendingAuth.userData.role);
+      setCurrentUser(pendingAuth.user.email);
+
+      if (pendingAuth.userData.role === "faculty") {
+        setFacultySubject(pendingAuth.userData.subject);
+      }
+
+      setLoggedIn(true);
+      setIsVerifyingOtp(false);
+
+      // Audit log
+      await push(ref(db, "auditLogs"), {
+        action: `User completed 2FA OTP verification: ${pendingAuth.user.email}`,
+        user: pendingAuth.user.email,
+        userUid: pendingAuth.user.uid,
+        timestamp: new Date().toISOString(),
+      });
+
+      alert(`✅ Two-Factor Authentication Successful!\n\nWelcome, ${pendingAuth.user.email}`);
+      setPendingAuth(null);
+      setSimulatedOtpCode(null);
+    } catch (error) {
+      console.error("OTP verification error:", error);
+      throw error;
+    } finally {
+      setIsSubmittingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingAuth) return;
+
+    try {
+      const otp = generateNumericOTP(6);
+
+      const { expiresAt } = await storeOTPRecord(
+        db,
+        pendingAuth.user.uid,
+        pendingAuth.user.email,
+        otp,
+        5
+      );
+
+      const sendResult = await sendEmailOTP({
+        email: pendingAuth.user.email,
+        otp,
+        userName: pendingAuth.user.email,
+      });
+
+      setOtpExpiresAt(expiresAt);
+      setSimulatedOtpCode(sendResult.deliveredVia === "simulated" ? otp : null);
+
+      alert(
+        sendResult.deliveredVia === "simulated"
+          ? `✉️ New code sent! (In development: ${otp})`
+          : `✉️ A fresh 6-digit code has been sent to ${pendingAuth.user.email}.`
+      );
+    } catch (error) {
+      console.error("Resend OTP error:", error);
+      alert("Failed to resend code: " + error.message);
+      throw error;
+    }
+  };
+
+  const handleCancelOtp = () => {
+    auth.signOut();
+    setIsVerifyingOtp(false);
+    setPendingAuth(null);
+    setSimulatedOtpCode(null);
+    setEmail("");
+    setPassword("");
+  };
+
+
+  // =====================================================
   // LOGOUT
   // =====================================================
 
   const logout = () => {
+
+    auth.signOut();
 
     setLoggedIn(false);
 
@@ -338,70 +472,67 @@ function App() {
     setReceipt(null);
 
     setSelectedFile(null);
+
+    setIsVerifyingOtp(false);
+
+    setPendingAuth(null);
+
+    setSimulatedOtpCode(null);
   };
 
 
   // =====================================================
-  // CLOUDINARY FILE UPLOAD
+  // CLOUDINARY FILE UPLOAD (CIPHERTEXT ONLY)
   // =====================================================
 
-  const uploadFileToCloudinary =
-    async () => {
+  const uploadBlobToCloudinary = async (
+    blob,
+    filename = "submission_ciphertext.pdf"
+  ) => {
+    if (!blob) {
+      throw new Error("No data provided for upload.");
+    }
 
-      if (!selectedFile) {
+    const formData = new FormData();
+    formData.append("file", blob, filename);
+    formData.append("upload_preset", "assignment_uploads");
 
-        return null;
-      }
-
-
-      const formData =
-        new FormData();
-
-
-      formData.append(
-        "file",
-        selectedFile
+    try {
+      const response = await axios.post(
+        "https://api.cloudinary.com/v1_1/ksbtuok3/raw/upload",
+        formData,
+        { timeout: 60000 }
       );
 
-
-      formData.append(
-        "upload_preset",
-        "assignment_uploads"
-      );
-
-
-      try {
-
-        const response =
-          await axios.post(
-            "https://api.cloudinary.com/v1_1/ksbtuok3/raw/upload",
-            formData
-          );
-
-
-        console.log(
-          "Cloudinary Success:",
-          response.data
-        );
-
-
-        return response.data.secure_url;
-
-      } catch (error) {
-
-        console.log(
-          "Cloudinary Error:",
-          error
-        );
-
-        alert(
-          "Cloudinary Upload Failed"
-        );
-
-        return null;
+      if (!response.data?.secure_url) {
+        throw new Error("Cloudinary did not return a file URL.");
       }
-    };
 
+      console.log("Cloudinary ciphertext upload successful:", {
+        publicId: response.data.public_id,
+        resourceType: response.data.resource_type,
+        format: response.data.format,
+      });
+
+      return response.data.secure_url;
+    } catch (error) {
+      const cloudinaryMessage =
+        error.response?.data?.error?.message ||
+        error.response?.headers?.["x-cld-error"] ||
+        error.message ||
+        "Unknown upload error";
+
+      console.error("Cloudinary upload failed:", {
+        status: error.response?.status,
+        message: cloudinaryMessage,
+        response: error.response?.data,
+      });
+
+      throw new Error(`Cloudinary upload failed: ${cloudinaryMessage}`, {
+        cause: error,
+      });
+    }
+  };
 
   // =====================================================
   // SUBMIT ASSIGNMENT
@@ -411,6 +542,14 @@ function App() {
     async () => {
 
       try {
+        // Ensure a Firebase-authenticated student is submitting.
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error("Please log in again before submitting an assignment.");
+        }
+        if (userRole !== "student") {
+          throw new Error("Only students can submit assignments.");
+        }
 
         // =================================================
         // BASIC FILE CHECK
@@ -432,10 +571,14 @@ function App() {
 
         const selectedAssignment =
           availableAssignments.find(
-            (assignment) =>
-              assignment.title === title &&
-              assignment.subject === subject
+            (assignment) => assignment.id === selectedAssignmentId
           );
+
+        if (!selectedAssignment) {
+          throw new Error(
+            "Please select an assignment from Available Assignments before submitting."
+          );
+        }
 
 
         if (
@@ -746,22 +889,60 @@ function App() {
 
 
         // =================================================
-        // UPLOAD TO CLOUDINARY
+        // RETRIEVE AND VALIDATE FACULTY RECIPIENT PUBLIC KEY
         // =================================================
-
-        const fileUrl =
-          await uploadFileToCloudinary();
-
-
-        if (!fileUrl) {
-
-          alert(
-            "Assignment submission stopped because file upload failed."
+        if (!selectedAssignment.createdByUid) {
+          throw new Error(
+            "The selected assignment has no recorded faculty owner UID. Submissions cannot be securely delivered without a faculty recipient."
           );
-
-          return;
         }
 
+        const facultyKeySnap = await get(
+          ref(db, `facultyKeys/${selectedAssignment.createdByUid}/publicKey`)
+        );
+
+        if (!facultyKeySnap.exists()) {
+          throw new Error(
+            `The faculty member for this assignment has not yet registered an ECC encryption key pair. Please notify your faculty (${selectedAssignment.createdBy || "faculty"}) to log in and register their key.`
+          );
+        }
+
+        const facultyPublicKey = await importECCPublicKey(facultyKeySnap.val());
+
+        setIsSubmitting(true);
+
+        // =================================================
+        // AES-256-GCM ENCRYPTION & KEY WRAPPING
+        // =================================================
+        // 1. Encrypt original file bytes using fresh AES-256-GCM key and random 96-bit IV
+        const { encryptedBlob, ivBase64, key: aesKey } =
+          await encryptFile(selectedFile);
+
+        // 2. Wrap AES key for the faculty owner using ECDH + HKDF + AES-GCM
+        const wrappedAESKey = await wrapAESKeyForFaculty(
+          aesKey,
+          facultyPublicKey
+        );
+
+        // 3. Compute SHA-256 of the exact ciphertext bytes
+        const ciphertextHash = await calculateSHA256(encryptedBlob);
+
+        console.log("Ciphertext SHA-256 Hash:", ciphertextHash);
+
+        // =================================================
+        // UPLOAD CIPHERTEXT BLOB TO CLOUDINARY
+        // =================================================
+        // Only the encrypted Blob is uploaded, never the original plaintext file.
+        // We preserve the allowed file extension (.pdf / .docx / .doc) to satisfy Cloudinary preset whitelist.
+        const originalExtension = selectedFile.name.includes(".")
+          ? selectedFile.name.split(".").pop().toLowerCase()
+          : "pdf";
+        const uploadFilename = `${submissionId}_enc.${originalExtension}`;
+
+        const fileUrl = await uploadBlobToCloudinary(
+          encryptedBlob,
+          uploadFilename
+        );
 
         // =================================================
         // STORE SUBMISSION IN FIREBASE
@@ -776,33 +957,44 @@ function App() {
 
             submissionId,
 
+            assignmentId: selectedAssignment.id,
+
+            facultyUid: selectedAssignment.createdByUid,
+
             studentEmail:
               currentUser,
+            
+            studentUid: user.uid,
 
-            title,
+            title: selectedAssignment.title,
 
-            subject,
+            subject: selectedAssignment.subject,
 
             description,
 
             submittedAt:
-              new Date().toLocaleString(),
+              new Date().toISOString(),
 
             status:
               "Pending",
 
-            fileUrl,
+            fileUrl, // Ciphertext Cloudinary URL
 
-            fileName:
-              selectedFile
-                ? selectedFile.name
-                : "",
+            fileName: selectedFile.name,
 
-           // ===========================================
-          // SHA-256 FILE HASH
-          // ===========================================
+            fileMimeType: selectedFile.type || "application/octet-stream",
 
-          fileHash,
+            // ===========================================
+            // HASHES & ENCRYPTION METADATA
+            // ===========================================
+            originalFileHash: fileHash,
+            fileHash, // legacy compatibility
+            ciphertextHash,
+            encryptionAlgorithm: "AES-256-GCM",
+            iv: ivBase64,
+            wrappedAESKey,
+            isEncrypted: true,
+
             // -------------------------------------------
             // PLAGIARISM DATA
             // -------------------------------------------
@@ -837,13 +1029,15 @@ function App() {
           {
 
             action:
-              `Student submitted assignment: ${title}`,
+              `Student submitted encrypted assignment: ${selectedAssignment.title}`,
 
             user:
               currentUser,
 
+            userUid: user.uid,
+
             timestamp:
-              new Date().toLocaleString(),
+              new Date().toISOString(),
           }
         );
 
@@ -859,49 +1053,37 @@ function App() {
           studentEmail:
             currentUser,
 
-          title,
+          title: selectedAssignment.title,
 
-          subject,
+          subject: selectedAssignment.subject,
 
           submittedAt:
             new Date().toLocaleString(),
 
           status:
             "Pending",
+
+          ciphertextHash,
         });
 
 
         // =================================================
-        // SUCCESS MESSAGE
+        // SUCCESS MESSAGE & RESET
         // =================================================
 
         alert(
-
-          `Assignment Submitted Successfully!\n\n` +
-
+          `🔒 Assignment Encrypted & Submitted Successfully!\n\n` +
           `Submission ID: ${submissionId}\n\n` +
-
-          `Plagiarism Status: ` +
-          `${plagiarismResult.status}\n` +
-
-          `Similarity: ` +
-          `${plagiarismResult.similarity}%`
-
+          `Ciphertext SHA-256:\n${ciphertextHash}\n\n` +
+          `Plagiarism Status: ${plagiarismResult.status}\n` +
+          `Similarity: ${plagiarismResult.similarity}%`
         );
 
-
-        // =================================================
-        // CLEAR FORM
-        // =================================================
-
         setTitle("");
-
         setSubject("");
-
         setDescription("");
-
+        setSelectedAssignmentId("");
         setSelectedFile(null);
-
 
       } catch (error) {
 
@@ -913,6 +1095,8 @@ function App() {
         alert(
           error.message
         );
+      } finally {
+        setIsSubmitting(false);
       }
     };
 
@@ -921,73 +1105,66 @@ function App() {
   // CREATE ASSIGNMENT
   // =====================================================
 
-  const createAssignment =
-    async () => {
+ 
+const createAssignment = async () => {
+  try {
+    // Verify that a Firebase user is signed in
+    const user = auth.currentUser;
 
-      try {
+    if (!user) {
+      throw new Error(
+        "You must be logged in to create an assignment."
+      );
+    }
 
-        await push(
-          ref(
-            db,
-            "assignmentsCreated"
-          ),
-          {
+    // Ensure the current app role is faculty
+    if (userRole !== "faculty") {
+      throw new Error(
+        "Only faculty members can create assignments."
+      );
+    }
 
-            title:
-              assignmentTitle,
+    // Create the assignment
+    await push(
+      ref(db, "assignmentsCreated"),
+      {
+        title: assignmentTitle,
+        subject: assignmentSubject,
+        deadline,
 
-            subject:
-              assignmentSubject,
+        // Preserve the existing email field
+        createdBy: user.email || currentUser,
 
-            deadline,
+        // New field for faculty ownership
+        createdByUid: user.uid,
 
-            createdBy:
-              currentUser,
-
-            createdAt:
-              new Date().toLocaleString(),
-          }
-        );
-
-
-        await push(
-          ref(
-            db,
-            "auditLogs"
-          ),
-          {
-
-            action:
-              `Faculty created assignment: ${assignmentTitle}`,
-
-            user:
-              currentUser,
-
-            timestamp:
-              new Date().toLocaleString(),
-          }
-        );
-
-
-        alert(
-          "Assignment Created Successfully!"
-        );
-
-
-        setAssignmentTitle("");
-
-        setAssignmentSubject("");
-
-        setDeadline("");
-
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
+        createdAt: new Date().toISOString(),
       }
-    };
+    );
+
+    // Create the audit log
+    await push(
+      ref(db, "auditLogs"),
+      {
+        action: `Faculty created assignment: ${assignmentTitle}`,
+
+
+        user: user.email || currentUser,
+        userUid: user.uid,
+        timestamp: new Date().toISOString(),
+      }
+    );
+
+    alert("Assignment Created Successfully!");
+
+    setAssignmentTitle("");
+    setAssignmentSubject("");
+    setDeadline("");
+  } catch (error) {
+    console.error("Create assignment error:", error);
+    alert(error.message);
+  }
+};
 
 
   // =====================================================
@@ -1161,12 +1338,12 @@ function App() {
             userRole ===
             "faculty"
           ) {
-
+            const currentUid = auth.currentUser?.uid;
             filteredList =
               assignmentList.filter(
                 (assignment) =>
-                  assignment.subject ===
-                  facultySubject
+                  (currentUid && assignment.facultyUid === currentUid) ||
+                  assignment.subject === facultySubject
               );
           }
 
@@ -1568,17 +1745,49 @@ function App() {
         }
 
 
+        selectedAssignmentId={
+          selectedAssignmentId
+        }
+
+
+        setSelectedAssignmentId={
+          setSelectedAssignmentId
+        }
+
+
         selectedFile={
           selectedFile
         }
-
 
         setSelectedFile={
           setSelectedFile
         }
 
+        isSubmitting={
+          isSubmitting
+        }
+
       />
 
+    );
+  }
+
+
+  // =====================================================
+  // 2FA OTP VERIFICATION SCREEN
+  // =====================================================
+
+  if (isVerifyingOtp && pendingAuth) {
+    return (
+      <OTPVerification
+        email={pendingAuth.user.email}
+        onVerify={handleVerifyOtp}
+        onResend={handleResendOtp}
+        onCancel={handleCancelOtp}
+        expiresAt={otpExpiresAt}
+        simulatedCode={simulatedOtpCode}
+        isVerifying={isSubmittingOtp}
+      />
     );
   }
 
