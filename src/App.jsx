@@ -1,4 +1,5 @@
 import FacultyDashboard from "./components/FacultyDashboard";
+import SecurityDashboard from "./components/SecurityDashboard";
 import StudentDashboard from "./components/StudentDashboard";
 import RoleSelection from "./components/RoleSelection";
 import Auth from "./components/Auth";
@@ -21,19 +22,6 @@ import {
 } from "./services/plagiarismService";
 
 import { calculateSHA256 } from "./services/hashService";
-
-import {
-  encryptFile,
-  wrapAESKeyForFaculty,
-  importECCPublicKey,
-} from "./services/encryptionService";
-
-import {
-  generateNumericOTP,
-  storeOTPRecord,
-  sendEmailOTP,
-  verifyOTPRecord,
-} from "./services/otpService";
 
 import {
   ref,
@@ -59,6 +47,7 @@ function App() {
   const [password, setPassword] = useState("");
 
   const [loggedIn, setLoggedIn] = useState(false);
+  const [showSecurityDashboard, setShowSecurityDashboard] = useState(false);
 
   const [selectedRole, setSelectedRole] =
     useState("");
@@ -609,13 +598,59 @@ function App() {
         // SHA-256 FILE INTEGRITY HASH
         // =================================================
 
-        const fileHash =
-          await calculateSHA256(selectedFile);
+       
 
-        console.log(
-          "SHA-256 File Hash:",
-          fileHash
+        // SHA-256 FILE HASH
+        const fileHash = await calculateSHA256(selectedFile);
+
+        console.log("SHA-256 File Hash:", fileHash);
+
+        // CHECK FOR EXACT DUPLICATE FILES
+        const existingSnapshot = await get(ref(db, "assignments"));
+
+        if (existingSnapshot.exists()) {
+          const existingData = existingSnapshot.val();
+
+          const duplicate = Object.entries(existingData).find(
+            ([, submission]) =>
+              submission.fileHash === fileHash
+          );
+
+          if (duplicate) {
+            const [existingKey, existingSubmission] = duplicate;
+
+            const sameStudent =
+              existingSubmission.studentEmail === currentUser;
+
+            const message = sameStudent
+              ? `You have already submitted this exact file.\n` +
+                `Previous Submission ID: ${
+                  existingSubmission.submissionId || existingKey
+                }\n\nDo you want to submit it again?`
+              : `Duplicate file detected!\n` +
+                `This exact file matches an existing submission.\n` +
+                `Assignment: ${existingSubmission.title || "Untitled"}\n\n` +
+                `Do you want to continue anyway?`;
+
+            const confirmed = window.confirm(message);
+
+            if (!confirmed) {
+              return;
+            }
+          }
+        }
+
+        // DIGITAL SIGNATURE
+        const digitalSignature = await signFileHash(
+          fileHash,
+          currentUser
         );
+
+
+console.log(
+  "Digital signature generated successfully."
+);
+
         // =================================================
         // DEFAULT PLAGIARISM RESULT
         // =================================================
@@ -984,17 +1019,11 @@ function App() {
 
             fileMimeType: selectedFile.type || "application/octet-stream",
 
-            // ===========================================
-            // HASHES & ENCRYPTION METADATA
-            // ===========================================
-            originalFileHash: fileHash,
-            fileHash, // legacy compatibility
-            ciphertextHash,
-            encryptionAlgorithm: "AES-256-GCM",
-            iv: ivBase64,
-            wrappedAESKey,
-            isEncrypted: true,
+           // ===========================================
+          // SHA-256 FILE HASH
+          // ===========================================
 
+          fileHash,
             // -------------------------------------------
             // PLAGIARISM DATA
             // -------------------------------------------
@@ -1565,6 +1594,25 @@ const createAssignment = async () => {
 
 
   // =====================================================
+  // SECURITY DASHBOARD
+  // =====================================================
+
+  if (loggedIn && showSecurityDashboard) {
+    return (
+      <SecurityDashboard
+        currentUser={currentUser}
+        auditLogs={auditLogs}
+        myAssignments={
+          userRole === "faculty"
+            ? allAssignments
+            : myAssignments
+        }
+        onBack={() => setShowSecurityDashboard(false)}
+      />
+    );
+  }
+
+  // =====================================================
   // FACULTY DASHBOARD
   // =====================================================
 
@@ -1681,6 +1729,13 @@ const createAssignment = async () => {
         userRole={
           userRole
         }
+        
+        openSecurityDashboard={() => {
+          setShowSecurityDashboard(true);
+          loadAssignments();
+          loadAuditLogs();
+        }}
+
 
 
         title={

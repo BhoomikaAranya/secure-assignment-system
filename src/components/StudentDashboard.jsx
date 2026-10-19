@@ -1,6 +1,7 @@
 function StudentDashboard({
   currentUser,
   userRole,
+  openSecurityDashboard,
   title,
   setTitle,
   subject,
@@ -206,8 +207,8 @@ function StudentDashboard({
                 {isPassed
                   ? "Deadline Passed"
                   : isSelected
-                  ? "✓ Selected"
-                  : "Select Assignment"}
+                    ? "✓ Selected"
+                    : "Select Assignment"}
               </button>
             </div>
           );
@@ -246,8 +247,8 @@ function StudentDashboard({
                   assignment.status === "Approved"
                     ? "green"
                     : assignment.status === "Rejected"
-                    ? "red"
-                    : "orange",
+                      ? "red"
+                      : "orange",
               }}
             >
               <b>Status:</b> {assignment.status}
@@ -259,15 +260,15 @@ function StudentDashboard({
               </p>
             )}
 
-            {assignment.description && <p>{assignment.description}</p>}
-            <p><b>Submitted:</b> {assignment.submittedAt}</p>
+            <p>{assignment.description}</p>
+
+            <p>
+              Submitted: {assignment.submittedAt}
+            </p>
           </div>
-        ))
-      )}
+        ))}
 
-      <hr style={{ margin: "25px 0" }} />
-
-      <button onClick={logout} style={{ padding: "8px 16px" }}>
+      <button onClick={logout}>
         Logout
       </button>
     </div>
