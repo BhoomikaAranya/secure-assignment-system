@@ -1,11 +1,10 @@
 
 
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   signFileHash,
   verifyFileSignature,
 } from "../services/digitalSignatureService";
-import { calculateSHA256FromUrl } from "../services/hashService";
 
 
 function SecurityDashboard({
@@ -17,9 +16,6 @@ function SecurityDashboard({
     
   const [verificationResults, setVerificationResults] = useState({});
   const [isVerifying, setIsVerifying] = useState(false);
-
-  const [integrityResults, setIntegrityResults] = useState({});
-const [isCheckingIntegrity, setIsCheckingIntegrity] = useState(false);
   
   const [signatureTestResults, setSignatureTestResults] = useState(null);
   const [isTestingSignature, setIsTestingSignature] = useState(false);

@@ -266,11 +266,30 @@ function StudentDashboard({
               Submitted: {assignment.submittedAt}
             </p>
           </div>
-        ))}
+        ))
+      )}
 
-      <button onClick={logout}>
-        Logout
-      </button>
+      <div style={{ marginTop: "20px" }}>
+        <button
+          onClick={openSecurityDashboard}
+          style={{
+            marginRight: "10px",
+            padding: "10px 16px",
+            backgroundColor: "#166534",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          🔐 Security Dashboard
+        </button>
+
+        <button onClick={logout} style={{ padding: "10px 16px", borderRadius: "8px", cursor: "pointer" }}>
+          Logout
+        </button>
+      </div>
     </div>
   );
 }
